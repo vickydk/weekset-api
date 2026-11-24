@@ -57,7 +57,9 @@ func main() {
 		}, peopleSvc, authSvc)
 		httpadapter.MountPeople(router, peopleSvc, authSvc)
 		httpadapter.MountHome(router, &homeuc.Service{Centers: store, Users: store}, authSvc)
-		httpadapter.MountAvailability(router, &scheduleuc.Service{Schedule: store, Users: store}, authSvc)
+		scheduleSvc := &scheduleuc.Service{Schedule: store, Users: store}
+		httpadapter.MountAvailability(router, scheduleSvc, authSvc)
+		httpadapter.MountBookings(router, scheduleSvc, authSvc)
 	}
 
 	err := router.Start(":" + port)

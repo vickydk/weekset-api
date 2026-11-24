@@ -27,6 +27,7 @@ type Store struct {
 	rules       []port.AvailabilityRule
 	exceptions  []port.AvailabilityException
 	held        []heldHour
+	bookings    []port.Booking
 	lastMail    string
 }
 

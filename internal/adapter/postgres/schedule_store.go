@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/vickydk/weekset-api/internal/domain/schedule"
 	"github.com/vickydk/weekset-api/internal/domain/user"
 	"github.com/vickydk/weekset-api/internal/port"
 )
@@ -140,4 +142,46 @@ func clockText(value string) string {
 		return value[:5]
 	}
 	return value
+}
+
+func (s *Store) InsertBooking(ctx context.Context, booking port.Booking) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO bookings (id, fitness_center_id, branch_id, trainer_user_id, client_user_id, starts_at, ends_at, status)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		booking.ID, booking.FitnessCenterID, booking.BranchID, booking.TrainerUserID, booking.ClientUserID,
+		booking.StartsAt, booking.EndsAt, booking.Status)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
+		return schedule.ErrHourBooked
+	}
+	return err
+}
+
+func (s *Store) ListBookings(ctx context.Context, centerID, clientID, trainerID string, from, to time.Time) ([]port.Booking, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT b.id::text, b.fitness_center_id::text, b.branch_id::text,
+		       b.trainer_user_id::text, b.client_user_id::text,
+		       trainer.display_name, client.display_name,
+		       b.starts_at, b.ends_at, b.status
+		FROM bookings b
+		JOIN users trainer ON trainer.id = b.trainer_user_id
+		JOIN users client ON client.id = b.client_user_id
+		WHERE b.fitness_center_id = $1
+		  AND ($2 = '' OR b.client_user_id = $2::uuid)
+		  AND ($3 = '' OR b.trainer_user_id = $3::uuid)
+		  AND b.starts_at < $5 AND b.ends_at > $4
+		ORDER BY b.starts_at`, centerID, clientID, trainerID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []port.Booking{}
+	for rows.Next() {
+		var booking port.Booking
+		if err := rows.Scan(&booking.ID, &booking.FitnessCenterID, &booking.BranchID, &booking.TrainerUserID, &booking.ClientUserID, &booking.TrainerName, &booking.ClientName, &booking.StartsAt, &booking.EndsAt, &booking.Status); err != nil {
+			return nil, err
+		}
+		out = append(out, booking)
+	}
+	return out, rows.Err()
 }

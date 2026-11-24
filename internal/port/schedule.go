@@ -42,4 +42,20 @@ type ScheduleStore interface {
 	ListHeld(ctx context.Context, centerID, trainerID string, from, to time.Time) ([]HeldHour, error)
 	CenterZone(ctx context.Context, centerID string) (string, error)
 	AssignedTrainer(ctx context.Context, centerID, clientUserID string) (trainerID, branchID string, err error)
+	InsertBooking(ctx context.Context, booking Booking) error
+	ListBookings(ctx context.Context, centerID, clientID, trainerID string, from, to time.Time) ([]Booking, error)
+}
+
+// Booking is one hour a client asked for.
+type Booking struct {
+	ID              string
+	FitnessCenterID string
+	BranchID        string
+	TrainerUserID   string
+	ClientUserID    string
+	TrainerName     string
+	ClientName      string
+	StartsAt        time.Time
+	EndsAt          time.Time
+	Status          string
 }

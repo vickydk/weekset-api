@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/vickydk/weekset-api/internal/domain/schedule"
 	"github.com/vickydk/weekset-api/internal/domain/user"
 	"github.com/vickydk/weekset-api/internal/port"
 )
@@ -121,4 +122,53 @@ func (s *Store) AssignedTrainer(_ context.Context, centerID, clientUserID string
 		return "", "", user.ErrNotFound
 	}
 	return assignment.TrainerUserID, assignment.BranchID, nil
+}
+
+func (s *Store) InsertBooking(_ context.Context, booking port.Booking) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if schedule.HoldsSlot(schedule.Status(booking.Status)) {
+		for _, hour := range s.held {
+			if hour.CenterID != booking.FitnessCenterID || hour.TrainerID != booking.TrainerUserID {
+				continue
+			}
+			if booking.StartsAt.Before(hour.EndsAt) && hour.StartsAt.Before(booking.EndsAt) {
+				return schedule.ErrHourBooked
+			}
+		}
+		s.held = append(s.held, heldHour{
+			CenterID: booking.FitnessCenterID, TrainerID: booking.TrainerUserID,
+			StartsAt: booking.StartsAt, EndsAt: booking.EndsAt,
+		})
+	}
+	s.bookings = append(s.bookings, booking)
+	return nil
+}
+
+func (s *Store) ListBookings(_ context.Context, centerID, clientID, trainerID string, from, to time.Time) ([]port.Booking, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []port.Booking{}
+	for _, booking := range s.bookings {
+		if booking.FitnessCenterID != centerID {
+			continue
+		}
+		if clientID != "" && booking.ClientUserID != clientID {
+			continue
+		}
+		if trainerID != "" && booking.TrainerUserID != trainerID {
+			continue
+		}
+		if !booking.StartsAt.Before(to) || !booking.EndsAt.After(from) {
+			continue
+		}
+		if account, ok := s.users[booking.ClientUserID]; ok {
+			booking.ClientName = account.DisplayName
+		}
+		if account, ok := s.users[booking.TrainerUserID]; ok {
+			booking.TrainerName = account.DisplayName
+		}
+		out = append(out, booking)
+	}
+	return out, nil
 }
