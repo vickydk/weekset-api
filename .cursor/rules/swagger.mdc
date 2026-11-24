@@ -1,0 +1,20 @@
+---
+description: Swagger required for every new or changed HTTP API
+globs: internal/adapter/http/**/*.go,cmd/api/**/*.go
+alwaysApply: false
+---
+
+# Swagger on every API
+
+When you add, remove, or change an HTTP endpoint, update Swagger in the **same change**. Follow @AGENTS.md **Swagger docs** and @docs/code-guidelines.md **Swagger**.
+
+Required in that change:
+
+1. swaggo comments on the handler (`@Summary`, `@Description`, `@Tags`, `@Router`, `@Success`, `@Failure`, `@Security` when authenticated).
+2. Write `@Description` for the Weekset Flutter app: when to call, `Authorization: Bearer <access token>`, what to persist, how to branch on status codes.
+3. `example` tags on request/response DTO JSON fields. Never accept a role, a center id, or another user's id as a client-supplied way to gain access.
+4. Failures use `apierror.ErrorResponse` and match real `platform/apierror` codes.
+5. Regenerate: `make swagger` (or `swag init --parseDependency --parseInternal -g cmd/api/main.go -o docs`).
+6. Commit `docs/docs.go`, `docs/swagger.json`, and `docs/swagger.yaml`.
+
+A handler without matching swagger is incomplete.

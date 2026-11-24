@@ -1,0 +1,13 @@
+---
+description: Mockery unit tests for use cases and HTTP adapters
+globs: "**/*_test.go"
+alwaysApply: false
+---
+
+# Unit test rules
+
+When creating or modifying tests, follow the mockery pattern in @docs/code-guidelines.md (**Unit testing with mockery**) — `.mockery.yml`, `mocks.NewX(t)`, `.On(...)`, `require` for setup, `assert` for behavior.
+
+Default to unit tests with mocked ports. Do not hit Postgres or a running server. Add `//go:build integration` only when the test cannot work without real infrastructure.
+
+See @AGENTS.md **Testing** for commands (`go test ./...`, regenerate mocks with `mockery`).

@@ -1,0 +1,17 @@
+---
+description: Hexagonal Go layout, logging, errors, and ozzo-validation
+globs: cmd/**/*.go,internal/**/*.go
+alwaysApply: false
+---
+
+# Project code guidelines
+
+When creating or refactoring Go, follow @docs/code-guidelines.md.
+
+New work is hexagonal: `adapter/http` → `usecase` → `port` → `domain`. Postgres stays in `internal/adapter/postgres`. Wire dependencies only in `cmd/api`. Handlers must not import SQL drivers.
+
+Use `internal/platform/logger`: always pass `ctx`, keyed `logger.Field{Key, Val}`. Never log passwords, tokens, workout notes, or other PII.
+
+Map domain errors in the HTTP adapter via `platform/apierror`. Validate request DTOs with ozzo-validation `Validate()` on the adapter struct, not `if` chains.
+
+Every new or changed HTTP route must include swaggo comments, DTO `example` tags, and regenerated `docs/swagger.json` in the same change. Write descriptions for the Weekset Flutter app (when to call, Bearer access token, status-code branching).

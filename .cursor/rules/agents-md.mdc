@@ -1,0 +1,8 @@
+---
+description: Canonical AI agent instructions; follow AGENTS.md at repo root
+alwaysApply: true
+---
+
+# Agent instructions
+
+Follow **AGENTS.md** at repo root for project-wide guidance (orientation, tooling, testing, Swagger docs, PR workflow, where to look). For Go under `cmd/` and `internal/`, follow **docs/code-guidelines.md** (hexagonal architecture, logging, errors, mockery, ozzo-validation). Other rules in `.cursor/rules/` apply when their globs match.
