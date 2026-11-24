@@ -180,6 +180,10 @@ func (s *Store) AssignTrainer(_ context.Context, draft port.Assignment) error {
 	return nil
 }
 
+func (s *Store) CountTrainerRules(context.Context, string, string) (int, error) {
+	return 0, nil
+}
+
 func memberKey(userID, centerID string) string {
 	return userID + "|" + centerID
 }

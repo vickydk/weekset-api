@@ -97,4 +97,5 @@ type CenterStore interface {
 	AssignTrainer(ctx context.Context, draft Assignment) error
 	ReplaceManagerBranches(ctx context.Context, centerID, userID string, branchIDs []string) error
 	BranchBelongs(ctx context.Context, centerID, branchID string) (bool, error)
+	CountTrainerRules(ctx context.Context, centerID, trainerUserID string) (int, error)
 }

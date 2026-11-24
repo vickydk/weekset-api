@@ -209,6 +209,14 @@ func (s *Store) AssignTrainer(ctx context.Context, draft port.Assignment) error 
 	return tx.Commit(ctx)
 }
 
+func (s *Store) CountTrainerRules(ctx context.Context, centerID, trainerUserID string) (int, error) {
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT count(*) FROM availability_rules
+		WHERE fitness_center_id = $1 AND trainer_user_id = $2`, centerID, trainerUserID).Scan(&count)
+	return count, err
+}
+
 func membershipConflict(err error, role string) error {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {

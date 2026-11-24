@@ -16,6 +16,7 @@ import (
 	"github.com/vickydk/weekset-api/internal/platform/token"
 	authuc "github.com/vickydk/weekset-api/internal/usecase/auth"
 	centeruc "github.com/vickydk/weekset-api/internal/usecase/center"
+	homeuc "github.com/vickydk/weekset-api/internal/usecase/home"
 	peopleuc "github.com/vickydk/weekset-api/internal/usecase/people"
 )
 
@@ -54,6 +55,7 @@ func main() {
 			Hasher:  password.Default(),
 		}, peopleSvc, authSvc)
 		httpadapter.MountPeople(router, peopleSvc, authSvc)
+		httpadapter.MountHome(router, &homeuc.Service{Centers: store, Users: store}, authSvc)
 	}
 
 	err := router.Start(":" + port)
