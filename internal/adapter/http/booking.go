@@ -35,6 +35,8 @@ func MountBookings(e *echo.Echo, svc *scheduleuc.Service, authSvc *authuc.Servic
 	series.POST("/:id/move", h.move)
 	e.GET("/v1/notifications", h.inbox, h.auth.requireUser)
 	e.POST("/v1/notifications/:id/read", h.openNotice, h.auth.requireUser)
+	authed.PUT("/:id/log", h.writeLog)
+	authed.GET("/:id/log", h.readLog)
 }
 
 type bookingBody struct {
@@ -187,6 +189,73 @@ func (h bookingHandler) openNotice(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{
 		"id": notice.ID, "kind": notice.Kind, "booking_id": notice.BookingID,
 	})
+}
+
+type logBody struct {
+	Note      string        `json:"note"`
+	Exercises []logExercise `json:"exercises"`
+}
+
+type logExercise struct {
+	Name string   `json:"name"`
+	Sets []logSet `json:"sets"`
+}
+
+type logSet struct {
+	Reps int    `json:"reps"`
+	Load string `json:"load"`
+	Unit string `json:"unit"`
+}
+
+func (b logBody) Validate() error { return nil }
+
+func (h bookingHandler) writeLog(c echo.Context) error {
+	var body logBody
+	if err := decode(c, &body); err != nil {
+		return nil
+	}
+	sets := make([]port.SessionSet, 0)
+	for _, exercise := range body.Exercises {
+		for _, set := range exercise.Sets {
+			sets = append(sets, port.SessionSet{
+				ExerciseName: exercise.Name, Reps: set.Reps, Load: set.Load, Unit: set.Unit,
+			})
+		}
+	}
+	log, err := h.svc.WriteLog(c.Request().Context(), userID(c), c.Param("id"), body.Note, sets, requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	return c.JSON(http.StatusOK, logJSON(log))
+}
+
+func (h bookingHandler) readLog(c echo.Context) error {
+	log, err := h.svc.ReadLog(c.Request().Context(), userID(c), c.Param("id"), requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	return c.JSON(http.StatusOK, logJSON(log))
+}
+
+func logJSON(log port.SessionLog) map[string]any {
+	exercises := map[string][]map[string]any{}
+	order := []string{}
+	for _, set := range log.Sets {
+		if _, ok := exercises[set.ExerciseName]; !ok {
+			order = append(order, set.ExerciseName)
+		}
+		exercises[set.ExerciseName] = append(exercises[set.ExerciseName], map[string]any{
+			"reps": set.Reps, "load": set.Load, "unit": set.Unit,
+		})
+	}
+	out := make([]map[string]any, 0, len(order))
+	for _, name := range order {
+		out = append(out, map[string]any{"name": name, "sets": exercises[name]})
+	}
+	return map[string]any{
+		"booking_id": log.BookingID, "note": log.Note,
+		"updated_at": log.UpdatedAt.UTC().Format(time.RFC3339), "exercises": out,
+	}
 }
 
 func bookingJSON(booking port.Booking) map[string]string {

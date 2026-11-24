@@ -16,6 +16,15 @@ type heldHour struct {
 	EndsAt    time.Time
 }
 
+type auditEvent struct {
+	ID       string
+	CenterID string
+	ActorID  string
+	Action   string
+	Entity   string
+	EntityID string
+}
+
 func (s *Store) ReplaceRules(_ context.Context, centerID, branchID, trainerID string, rules []port.AvailabilityRule) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -326,4 +335,64 @@ func (s *Store) ReadNotification(_ context.Context, centerID, userID, noticeID s
 		}
 	}
 	return port.Notification{}, user.ErrNotFound
+}
+
+func (s *Store) SaveLog(_ context.Context, log port.SessionLog) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var booking *port.Booking
+	for i := range s.bookings {
+		if s.bookings[i].ID == log.BookingID && s.bookings[i].FitnessCenterID == log.FitnessCenterID {
+			booking = &s.bookings[i]
+			break
+		}
+	}
+	if booking == nil {
+		return user.ErrNotFound
+	}
+	log.BranchID = booking.BranchID
+	if log.UpdatedAt.IsZero() {
+		log.UpdatedAt = time.Now().UTC()
+	}
+	replaced := false
+	for i := range s.logs {
+		if s.logs[i].BookingID == log.BookingID {
+			log.ID = s.logs[i].ID
+			s.logs[i] = log
+			replaced = true
+		}
+	}
+	if !replaced {
+		if log.ID == "" {
+			return user.ErrNotFound
+		}
+		s.logs = append(s.logs, log)
+	}
+	if schedule.HoldsSlot(schedule.Status(booking.Status)) {
+		kept := make([]heldHour, 0, len(s.held))
+		for _, hour := range s.held {
+			if hour.TrainerID == booking.TrainerUserID && hour.StartsAt.Equal(booking.StartsAt) {
+				continue
+			}
+			kept = append(kept, hour)
+		}
+		s.held = kept
+	}
+	booking.Status = string(schedule.StatusCompleted)
+	s.audits = append(s.audits, auditEvent{
+		ID: log.ID, CenterID: log.FitnessCenterID, ActorID: booking.TrainerUserID,
+		Action: "session_log", Entity: "session_log", EntityID: log.ID,
+	})
+	return nil
+}
+
+func (s *Store) FindLog(_ context.Context, centerID, bookingID string) (port.SessionLog, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, log := range s.logs {
+		if log.FitnessCenterID == centerID && log.BookingID == bookingID {
+			return log, nil
+		}
+	}
+	return port.SessionLog{}, user.ErrNotFound
 }

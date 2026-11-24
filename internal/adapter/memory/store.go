@@ -31,6 +31,8 @@ type Store struct {
 	series      []port.Series
 	skips       []string
 	notices     []port.Notification
+	logs        []port.SessionLog
+	audits      []auditEvent
 	lastMail    string
 }
 

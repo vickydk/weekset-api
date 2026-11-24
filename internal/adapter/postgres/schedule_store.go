@@ -348,6 +348,86 @@ func (s *Store) ReadNotification(ctx context.Context, centerID, userID, noticeID
 	return notice, nil
 }
 
+func (s *Store) SaveLog(ctx context.Context, log port.SessionLog) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var branchID, trainerID string
+	err = tx.QueryRow(ctx, `
+		SELECT branch_id::text, trainer_user_id::text FROM bookings
+		WHERE id = $1 AND fitness_center_id = $2`, log.BookingID, log.FitnessCenterID).Scan(&branchID, &trainerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return user.ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO session_logs (id, booking_id, fitness_center_id, branch_id, note)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (booking_id) DO UPDATE SET note = EXCLUDED.note, updated_at = now()`,
+		log.ID, log.BookingID, log.FitnessCenterID, branchID, log.Note)
+	if err != nil {
+		return err
+	}
+	var logID string
+	if err := tx.QueryRow(ctx, `SELECT id::text FROM session_logs WHERE booking_id = $1`, log.BookingID).Scan(&logID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM session_log_sets WHERE session_log_id = $1`, logID); err != nil {
+		return err
+	}
+	for i, set := range log.Sets {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO session_log_sets (id, session_log_id, fitness_center_id, branch_id, position, exercise_name, reps, load, unit)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, 'kg')`,
+			logID, log.FitnessCenterID, branchID, i, set.ExerciseName, set.Reps, set.Load); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE bookings SET status = 'completed', updated_at = now() WHERE id = $1`, log.BookingID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO audit_events (id, fitness_center_id, actor_user_id, action, entity_type, entity_id)
+		VALUES (gen_random_uuid(), $1, $2, 'session_log', 'session_log', $3)`,
+		log.FitnessCenterID, trainerID, logID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) FindLog(ctx context.Context, centerID, bookingID string) (port.SessionLog, error) {
+	var log port.SessionLog
+	err := s.pool.QueryRow(ctx, `
+		SELECT id::text, booking_id::text, fitness_center_id::text, branch_id::text, note, updated_at
+		FROM session_logs WHERE fitness_center_id = $1 AND booking_id = $2`, centerID, bookingID).Scan(
+		&log.ID, &log.BookingID, &log.FitnessCenterID, &log.BranchID, &log.Note, &log.UpdatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return port.SessionLog{}, user.ErrNotFound
+	}
+	if err != nil {
+		return port.SessionLog{}, err
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT exercise_name, reps, load, unit FROM session_log_sets
+		WHERE session_log_id = $1 ORDER BY position`, log.ID)
+	if err != nil {
+		return port.SessionLog{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var set port.SessionSet
+		if err := rows.Scan(&set.ExerciseName, &set.Reps, &set.Load, &set.Unit); err != nil {
+			return port.SessionLog{}, err
+		}
+		log.Sets = append(log.Sets, set)
+	}
+	return log, rows.Err()
+}
+
 func splitNotice(kind string) (string, string) {
 	parts := strings.SplitN(kind, ":", 2)
 	if len(parts) == 2 {

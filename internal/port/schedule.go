@@ -53,6 +53,8 @@ type ScheduleStore interface {
 	AddNotification(ctx context.Context, notice Notification) error
 	ListNotifications(ctx context.Context, centerID, userID string) ([]Notification, error)
 	ReadNotification(ctx context.Context, centerID, userID, noticeID string) (Notification, error)
+	SaveLog(ctx context.Context, log SessionLog) error
+	FindLog(ctx context.Context, centerID, bookingID string) (SessionLog, error)
 }
 
 // Booking is one hour a client asked for.
@@ -92,4 +94,23 @@ type Notification struct {
 	BookingID       string
 	Read            bool
 	CreatedAt       time.Time
+}
+
+// SessionSet is one measured set. Load is kilograms.
+type SessionSet struct {
+	ExerciseName string
+	Reps         int
+	Load         string
+	Unit         string
+}
+
+// SessionLog is the trainer's note for one booking.
+type SessionLog struct {
+	ID              string
+	BookingID       string
+	FitnessCenterID string
+	BranchID        string
+	Note            string
+	UpdatedAt       time.Time
+	Sets            []SessionSet
 }
