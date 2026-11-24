@@ -185,6 +185,15 @@ func (s *Service) ChangePassword(ctx context.Context, userID, current, next stri
 	return s.Tokens.RevokeUserRefresh(ctx, userID, s.now())
 }
 
+// StartSession issues a fresh token family for an account that already exists.
+func (s *Service) StartSession(ctx context.Context, email string) (Session, error) {
+	account, err := s.Users.FindByEmail(ctx, strings.ToLower(strings.TrimSpace(email)))
+	if err != nil {
+		return Session{}, user.ErrUnauthorized
+	}
+	return s.issue(ctx, account, newID())
+}
+
 // Me is the signed-in account and its memberships.
 func (s *Service) Me(ctx context.Context, userID string) (Profile, error) {
 	account, err := s.Users.FindByID(ctx, userID)

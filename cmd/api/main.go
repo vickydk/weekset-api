@@ -15,6 +15,7 @@ import (
 	"github.com/vickydk/weekset-api/internal/platform/password"
 	"github.com/vickydk/weekset-api/internal/platform/token"
 	authuc "github.com/vickydk/weekset-api/internal/usecase/auth"
+	centeruc "github.com/vickydk/weekset-api/internal/usecase/center"
 )
 
 func main() {
@@ -35,14 +36,21 @@ func main() {
 		if secret == "" {
 			secret = "development-only-secret"
 		}
-		httpadapter.MountAuth(router, &authuc.Service{
+		authSvc := &authuc.Service{
 			Users:  store,
 			Tokens: store,
 			Resets: store,
 			Mailer: postgres.LogMailer{},
 			Hasher: password.Default(),
 			Issuer: token.Issuer{Secret: []byte(secret), TTL: 15 * time.Minute},
-		})
+		}
+		httpadapter.MountAuth(router, authSvc)
+		httpadapter.MountCenter(router, &centeruc.Service{
+			Centers: store,
+			Users:   store,
+			Auth:    authSvc,
+			Hasher:  password.Default(),
+		}, authSvc)
 	}
 
 	err := router.Start(":" + port)

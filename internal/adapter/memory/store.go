@@ -18,6 +18,9 @@ type Store struct {
 	refresh  []port.RefreshToken
 	resets   []port.PasswordReset
 	members  map[string][]port.MembershipView
+	branches []port.Branch
+	centers  []storedCenter
+	invites  []port.Invite
 	lastMail string
 }
 

@@ -103,7 +103,18 @@ func (s *Store) Memberships(ctx context.Context, userID string) ([]port.Membersh
 		return nil, err
 	}
 	for i, id := range membershipIDs {
-		branches, err := s.managerBranches(ctx, id)
+		var branches []port.BranchView
+		var err error
+		if out[i].Role == "center_admin" {
+			listed, listErr := s.ListBranches(ctx, out[i].FitnessCenterID)
+			err = listErr
+			branches = make([]port.BranchView, 0, len(listed))
+			for _, branch := range listed {
+				branches = append(branches, port.BranchView{ID: branch.ID, Name: branch.Name})
+			}
+		} else {
+			branches, err = s.managerBranches(ctx, id)
+		}
 		if err != nil {
 			return nil, err
 		}
