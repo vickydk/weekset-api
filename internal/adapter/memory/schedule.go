@@ -439,3 +439,17 @@ func (s *Store) AssignedClients(_ context.Context, centerID, trainerID string) (
 	}
 	return out, nil
 }
+
+func (s *Store) ListAudits(_ context.Context, centerID string) ([]port.AuditEvent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []port.AuditEvent{}
+	for _, event := range s.audits {
+		if event.CenterID == centerID {
+			out = append(out, port.AuditEvent{
+				ActorID: event.ActorID, Action: event.Action, EntityType: event.Entity, EntityID: event.EntityID,
+			})
+		}
+	}
+	return out, nil
+}

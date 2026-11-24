@@ -58,6 +58,7 @@ type ScheduleStore interface {
 	SaveSolo(ctx context.Context, plan SoloPlan) error
 	FindSolo(ctx context.Context, centerID, clientID, planDate string) (SoloPlan, error)
 	AssignedClients(ctx context.Context, centerID, trainerID string) ([]AssignedClient, error)
+	ListAudits(ctx context.Context, centerID string) ([]AuditEvent, error)
 }
 
 // Booking is one hour a client asked for.
@@ -141,4 +142,12 @@ type SoloPlan struct {
 type AssignedClient struct {
 	UserID      string
 	DisplayName string
+}
+
+// AuditEvent stores ids only. It has no note, set, or load.
+type AuditEvent struct {
+	ActorID    string
+	Action     string
+	EntityType string
+	EntityID   string
 }

@@ -506,6 +506,25 @@ func (s *Store) AssignedClients(ctx context.Context, centerID, trainerID string)
 	return out, rows.Err()
 }
 
+func (s *Store) ListAudits(ctx context.Context, centerID string) ([]port.AuditEvent, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT actor_user_id::text, action, entity_type, entity_id::text
+		FROM audit_events WHERE fitness_center_id = $1 ORDER BY created_at`, centerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []port.AuditEvent{}
+	for rows.Next() {
+		var event port.AuditEvent
+		if err := rows.Scan(&event.ActorID, &event.Action, &event.EntityType, &event.EntityID); err != nil {
+			return nil, err
+		}
+		out = append(out, event)
+	}
+	return out, rows.Err()
+}
+
 func splitNotice(kind string) (string, string) {
 	parts := strings.SplitN(kind, ":", 2)
 	if len(parts) == 2 {
