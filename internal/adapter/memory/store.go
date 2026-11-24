@@ -12,24 +12,28 @@ import (
 
 // Store is the account, the refresh family, and password resets.
 type Store struct {
-	mu       sync.Mutex
-	users    map[string]user.User
-	byEmail  map[string]string
-	refresh  []port.RefreshToken
-	resets   []port.PasswordReset
-	members  map[string][]port.MembershipView
-	branches []port.Branch
-	centers  []storedCenter
-	invites  []port.Invite
-	lastMail string
+	mu          sync.Mutex
+	users       map[string]user.User
+	byEmail     map[string]string
+	refresh     []port.RefreshToken
+	resets      []port.PasswordReset
+	members     map[string][]port.MembershipView
+	branches    []port.Branch
+	centers     []storedCenter
+	invites     []port.Invite
+	memberIDs   map[string]string
+	assignments map[string]port.Assignment
+	lastMail    string
 }
 
 // NewStore is empty.
 func NewStore() *Store {
 	return &Store{
-		users:   map[string]user.User{},
-		byEmail: map[string]string{},
-		members: map[string][]port.MembershipView{},
+		users:       map[string]user.User{},
+		byEmail:     map[string]string{},
+		members:     map[string][]port.MembershipView{},
+		memberIDs:   map[string]string{},
+		assignments: map[string]port.Assignment{},
 	}
 }
 
@@ -87,6 +91,9 @@ func (s *Store) PutMemberships(userID string, rows []port.MembershipView) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.members[userID] = rows
+	for _, row := range rows {
+		s.memberIDs[memberKey(userID, row.FitnessCenterID)] = userID + ":" + row.FitnessCenterID
+	}
 }
 
 func (s *Store) SaveRefresh(_ context.Context, token port.RefreshToken) error {

@@ -14,16 +14,18 @@ import (
 	"github.com/vickydk/weekset-api/internal/platform/apierror"
 	authuc "github.com/vickydk/weekset-api/internal/usecase/auth"
 	centeruc "github.com/vickydk/weekset-api/internal/usecase/center"
+	peopleuc "github.com/vickydk/weekset-api/internal/usecase/people"
 )
 
 type centerHandler struct {
-	svc  *centeruc.Service
-	auth authHandler
+	svc    *centeruc.Service
+	people *peopleuc.Service
+	auth   authHandler
 }
 
 // MountCenter adds center registration and the branch routes.
-func MountCenter(e *echo.Echo, svc *centeruc.Service, authSvc *authuc.Service) {
-	h := centerHandler{svc: svc, auth: authHandler{svc: authSvc}}
+func MountCenter(e *echo.Echo, svc *centeruc.Service, people *peopleuc.Service, authSvc *authuc.Service) {
+	h := centerHandler{svc: svc, people: people, auth: authHandler{svc: authSvc}}
 	limit := newLimiter(10, time.Minute)
 	e.POST("/v1/fitness-centers", h.open, limit.middleware)
 	authed := e.Group("/v1", h.auth.requireUser)
@@ -130,14 +132,24 @@ func (h centerHandler) renameBranch(c echo.Context) error {
 type inviteBody struct {
 	Email     string   `json:"email"`
 	Role      string   `json:"role"`
+	BranchID  string   `json:"branch_id"`
 	BranchIDs []string `json:"branch_ids"`
 }
 
 func (b inviteBody) Validate() error {
-	return validation.ValidateStruct(&b,
+	if err := validation.ValidateStruct(&b,
 		validation.Field(&b.Email, validation.Required, is.Email),
-		validation.Field(&b.Role, validation.Required, validation.In("manager")),
-		validation.Field(&b.BranchIDs, validation.Required, validation.Length(1, 20)),
+		validation.Field(&b.Role, validation.Required, validation.In("manager", "trainer", "client")),
+	); err != nil {
+		return err
+	}
+	if b.Role == "manager" {
+		return validation.ValidateStruct(&b,
+			validation.Field(&b.BranchIDs, validation.Required, validation.Length(1, 20)),
+		)
+	}
+	return validation.ValidateStruct(&b,
+		validation.Field(&b.BranchID, validation.Required),
 	)
 }
 
@@ -146,7 +158,14 @@ func (h centerHandler) inviteManager(c echo.Context) error {
 	if err := decode(c, &body); err != nil {
 		return nil
 	}
-	id, code, expires, err := h.svc.InviteManager(c.Request().Context(), userID(c), body.Email, body.BranchIDs)
+	var id, code string
+	var expires time.Time
+	var err error
+	if body.Role == "manager" {
+		id, code, expires, err = h.svc.InviteManager(c.Request().Context(), userID(c), body.Email, body.BranchIDs)
+	} else {
+		id, code, expires, err = h.people.Invite(c.Request().Context(), userID(c), body.Email, body.Role, body.BranchID, requestHeaders(c))
+	}
 	if err != nil {
 		return writeCenterError(c, err)
 	}
@@ -186,8 +205,13 @@ func writeCenterError(c echo.Context, err error) error {
 		apierror.Write(c.Response(), http.StatusConflict, "conflict", user.ErrEmailInUse.Error())
 	case errors.Is(err, user.ErrNotFound):
 		apierror.Write(c.Response(), http.StatusNotFound, "not_found", "not found")
-	case err.Error() == "manager already belongs to a center" || err.Error() == "account is not waiting as a manager":
+	case err.Error() == "manager already belongs to a center" || err.Error() == "account is not waiting as a manager" ||
+		errors.Is(err, membership.ErrTrainerHasBranch) || errors.Is(err, membership.ErrAlreadyInCenter) ||
+		errors.Is(err, membership.ErrManagerHasCenter) || errors.Is(err, peopleuc.ErrNotWaitingTrainer) ||
+		errors.Is(err, peopleuc.ErrNotWaitingClient):
 		apierror.Write(c.Response(), http.StatusConflict, "conflict", err.Error())
+	case errors.Is(err, peopleuc.ErrInviteInvalid):
+		apierror.Write(c.Response(), http.StatusBadRequest, "validation_error", peopleuc.ErrInviteInvalid.Error())
 	default:
 		apierror.Write(c.Response(), http.StatusBadRequest, "validation_error", "check the center details")
 	}

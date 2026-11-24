@@ -32,6 +32,51 @@ type Invite struct {
 	BranchIDs       []string
 	CodeHash        string
 	ExpiresAt       string
+	Accepted        bool
+}
+
+// Member is one membership inside a center.
+type Member struct {
+	MembershipID string
+	UserID       string
+	Role         string
+	Status       string
+	BranchID     string
+	DisplayName  string
+	Email        string
+}
+
+// Person is one row of the people list.
+type Person struct {
+	UserID      string
+	DisplayName string
+	Email       string
+	Role        string
+	Status      string
+	BranchID    string
+	BranchName  string
+	TrainerName string
+}
+
+// MembershipDraft is the membership created when a code is accepted.
+type MembershipDraft struct {
+	ID               string
+	UserID           string
+	FitnessCenterID  string
+	Role             string
+	BranchID         string
+	ManagerBranchIDs []string
+}
+
+// Assignment replaces the client's trainer at one center.
+type Assignment struct {
+	ID                  string
+	FitnessCenterID     string
+	BranchID            string
+	ClientUserID        string
+	TrainerUserID       string
+	ClientMembershipID  string
+	TrainerMembershipID string
 }
 
 // CenterStore writes centers, branches, and manager invites.
@@ -42,6 +87,14 @@ type CenterStore interface {
 	RenameBranch(ctx context.Context, centerID, branchID, name string) error
 	RenameCenter(ctx context.Context, centerID, name, timezone string) error
 	SaveInvite(ctx context.Context, invite Invite) error
+	FindInvite(ctx context.Context, codeHash string) (Invite, error)
+	AcceptInvite(ctx context.Context, inviteID string, draft MembershipDraft) error
+	ListPeople(ctx context.Context, centerID, branchID string, includeManagers bool) ([]Person, error)
+	ListOpenInvites(ctx context.Context, centerID string) ([]Invite, error)
+	FindMember(ctx context.Context, centerID, userID string) (Member, error)
+	SetMembershipStatus(ctx context.Context, centerID, userID, status string) error
+	DeleteMembership(ctx context.Context, centerID, userID string) error
+	AssignTrainer(ctx context.Context, draft Assignment) error
 	ReplaceManagerBranches(ctx context.Context, centerID, userID string, branchIDs []string) error
 	BranchBelongs(ctx context.Context, centerID, branchID string) (bool, error)
 }

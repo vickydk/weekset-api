@@ -16,6 +16,7 @@ import (
 	"github.com/vickydk/weekset-api/internal/platform/token"
 	authuc "github.com/vickydk/weekset-api/internal/usecase/auth"
 	centeruc "github.com/vickydk/weekset-api/internal/usecase/center"
+	peopleuc "github.com/vickydk/weekset-api/internal/usecase/people"
 )
 
 func main() {
@@ -45,12 +46,14 @@ func main() {
 			Issuer: token.Issuer{Secret: []byte(secret), TTL: 15 * time.Minute},
 		}
 		httpadapter.MountAuth(router, authSvc)
+		peopleSvc := &peopleuc.Service{Centers: store, Users: store}
 		httpadapter.MountCenter(router, &centeruc.Service{
 			Centers: store,
 			Users:   store,
 			Auth:    authSvc,
 			Hasher:  password.Default(),
-		}, authSvc)
+		}, peopleSvc, authSvc)
+		httpadapter.MountPeople(router, peopleSvc, authSvc)
 	}
 
 	err := router.Start(":" + port)
