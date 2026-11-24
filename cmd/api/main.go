@@ -60,6 +60,7 @@ func main() {
 		scheduleSvc := &scheduleuc.Service{Schedule: store, Users: store}
 		httpadapter.MountAvailability(router, scheduleSvc, authSvc)
 		httpadapter.MountBookings(router, scheduleSvc, authSvc)
+		httpadapter.MountExercises(router, authSvc)
 	}
 
 	err := router.Start(":" + port)
