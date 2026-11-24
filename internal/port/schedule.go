@@ -55,6 +55,9 @@ type ScheduleStore interface {
 	ReadNotification(ctx context.Context, centerID, userID, noticeID string) (Notification, error)
 	SaveLog(ctx context.Context, log SessionLog) error
 	FindLog(ctx context.Context, centerID, bookingID string) (SessionLog, error)
+	SaveSolo(ctx context.Context, plan SoloPlan) error
+	FindSolo(ctx context.Context, centerID, clientID, planDate string) (SoloPlan, error)
+	AssignedClients(ctx context.Context, centerID, trainerID string) ([]AssignedClient, error)
 }
 
 // Booking is one hour a client asked for.
@@ -113,4 +116,29 @@ type SessionLog struct {
 	Note            string
 	UpdatedAt       time.Time
 	Sets            []SessionSet
+}
+
+// SoloItem is one movement on a day the client does alone.
+type SoloItem struct {
+	Slug        string
+	Sets        int
+	Reps        int
+	RestSeconds int
+}
+
+// SoloPlan is not a booking and does not hold an hour.
+type SoloPlan struct {
+	ID              string
+	FitnessCenterID string
+	BranchID        string
+	ClientUserID    string
+	TrainerUserID   string
+	PlanDate        string
+	Items           []SoloItem
+}
+
+// AssignedClient is a person this trainer trains.
+type AssignedClient struct {
+	UserID      string
+	DisplayName string
 }

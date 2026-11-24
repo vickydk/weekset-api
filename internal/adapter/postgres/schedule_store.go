@@ -428,6 +428,84 @@ func (s *Store) FindLog(ctx context.Context, centerID, bookingID string) (port.S
 	return log, rows.Err()
 }
 
+func (s *Store) SaveSolo(ctx context.Context, plan port.SoloPlan) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `DELETE FROM solo_plans WHERE fitness_center_id = $1 AND client_user_id = $2 AND plan_date = $3`, plan.FitnessCenterID, plan.ClientUserID, plan.PlanDate); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `
+		INSERT INTO solo_plans (id, fitness_center_id, branch_id, client_user_id, trainer_user_id, plan_date)
+		VALUES ($1, $2, $3, $4, $5, $6)`,
+		plan.ID, plan.FitnessCenterID, plan.BranchID, plan.ClientUserID, plan.TrainerUserID, plan.PlanDate)
+	if err != nil {
+		return err
+	}
+	for i, item := range plan.Items {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO solo_plan_items (id, solo_plan_id, exercise_id, fitness_center_id, branch_id, position, sets, reps, rest_seconds)
+			SELECT gen_random_uuid(), $1, exercises.id, $2, $3, $4, $5, $6, $7
+			FROM exercises WHERE slug = $8`,
+			plan.ID, plan.FitnessCenterID, plan.BranchID, i, item.Sets, item.Reps, item.RestSeconds, item.Slug); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) FindSolo(ctx context.Context, centerID, clientID, planDate string) (port.SoloPlan, error) {
+	var plan port.SoloPlan
+	err := s.pool.QueryRow(ctx, `
+		SELECT id::text, fitness_center_id::text, branch_id::text, client_user_id::text, trainer_user_id::text, plan_date::text
+		FROM solo_plans WHERE fitness_center_id = $1 AND client_user_id = $2 AND plan_date = $3`,
+		centerID, clientID, planDate).Scan(&plan.ID, &plan.FitnessCenterID, &plan.BranchID, &plan.ClientUserID, &plan.TrainerUserID, &plan.PlanDate)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return port.SoloPlan{}, user.ErrNotFound
+	}
+	if err != nil {
+		return port.SoloPlan{}, err
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT exercises.slug, items.sets, items.reps, items.rest_seconds
+		FROM solo_plan_items items JOIN exercises ON exercises.id = items.exercise_id
+		WHERE items.solo_plan_id = $1 ORDER BY items.position`, plan.ID)
+	if err != nil {
+		return port.SoloPlan{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item port.SoloItem
+		if err := rows.Scan(&item.Slug, &item.Sets, &item.Reps, &item.RestSeconds); err != nil {
+			return port.SoloPlan{}, err
+		}
+		plan.Items = append(plan.Items, item)
+	}
+	return plan, rows.Err()
+}
+
+func (s *Store) AssignedClients(ctx context.Context, centerID, trainerID string) ([]port.AssignedClient, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.client_user_id::text, users.display_name
+		FROM trainer_assignments a JOIN users ON users.id = a.client_user_id
+		WHERE a.fitness_center_id = $1 AND a.trainer_user_id = $2`, centerID, trainerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []port.AssignedClient{}
+	for rows.Next() {
+		var client port.AssignedClient
+		if err := rows.Scan(&client.UserID, &client.DisplayName); err != nil {
+			return nil, err
+		}
+		out = append(out, client)
+	}
+	return out, rows.Err()
+}
+
 func splitNotice(kind string) (string, string) {
 	parts := strings.SplitN(kind, ":", 2)
 	if len(parts) == 2 {

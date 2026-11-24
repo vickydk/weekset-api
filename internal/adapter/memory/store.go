@@ -32,6 +32,7 @@ type Store struct {
 	skips       []string
 	notices     []port.Notification
 	logs        []port.SessionLog
+	solos       []port.SoloPlan
 	audits      []auditEvent
 	lastMail    string
 }

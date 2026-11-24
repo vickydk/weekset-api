@@ -61,6 +61,7 @@ func main() {
 		httpadapter.MountAvailability(router, scheduleSvc, authSvc)
 		httpadapter.MountBookings(router, scheduleSvc, authSvc)
 		httpadapter.MountExercises(router, authSvc)
+		httpadapter.MountSolo(router, scheduleSvc, authSvc)
 	}
 
 	err := router.Start(":" + port)

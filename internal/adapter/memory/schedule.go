@@ -396,3 +396,46 @@ func (s *Store) FindLog(_ context.Context, centerID, bookingID string) (port.Ses
 	}
 	return port.SessionLog{}, user.ErrNotFound
 }
+
+func (s *Store) SaveSolo(_ context.Context, plan port.SoloPlan) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := make([]port.SoloPlan, 0, len(s.solos))
+	for _, existing := range s.solos {
+		if existing.FitnessCenterID == plan.FitnessCenterID && existing.ClientUserID == plan.ClientUserID && existing.PlanDate == plan.PlanDate {
+			continue
+		}
+		next = append(next, existing)
+	}
+	next = append(next, plan)
+	s.solos = next
+	return nil
+}
+
+func (s *Store) FindSolo(_ context.Context, centerID, clientID, planDate string) (port.SoloPlan, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, plan := range s.solos {
+		if plan.FitnessCenterID == centerID && plan.ClientUserID == clientID && plan.PlanDate == planDate {
+			return plan, nil
+		}
+	}
+	return port.SoloPlan{}, user.ErrNotFound
+}
+
+func (s *Store) AssignedClients(_ context.Context, centerID, trainerID string) ([]port.AssignedClient, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []port.AssignedClient{}
+	for _, assignment := range s.assignments {
+		if assignment.FitnessCenterID != centerID || assignment.TrainerUserID != trainerID {
+			continue
+		}
+		name := assignment.ClientUserID
+		if account, ok := s.users[assignment.ClientUserID]; ok {
+			name = account.DisplayName
+		}
+		out = append(out, port.AssignedClient{UserID: assignment.ClientUserID, DisplayName: name})
+	}
+	return out, nil
+}
