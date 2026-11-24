@@ -215,3 +215,80 @@ func (s *Store) SetBookingStatus(_ context.Context, centerID, bookingID, status 
 	}
 	return user.ErrNotFound
 }
+
+func (s *Store) SaveSeries(_ context.Context, series port.Series, bookings []port.Booking) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, booking := range bookings {
+		if !schedule.HoldsSlot(schedule.Status(booking.Status)) {
+			continue
+		}
+		for _, hour := range s.held {
+			if hour.TrainerID == booking.TrainerUserID && booking.StartsAt.Before(hour.EndsAt) && hour.StartsAt.Before(booking.EndsAt) {
+				return schedule.ErrHourBooked
+			}
+		}
+	}
+	s.series = append(s.series, series)
+	for _, booking := range bookings {
+		if schedule.HoldsSlot(schedule.Status(booking.Status)) {
+			s.held = append(s.held, heldHour{
+				CenterID: booking.FitnessCenterID, TrainerID: booking.TrainerUserID,
+				StartsAt: booking.StartsAt, EndsAt: booking.EndsAt,
+			})
+		}
+		s.bookings = append(s.bookings, booking)
+	}
+	return nil
+}
+
+func (s *Store) SeriesBookings(_ context.Context, centerID, seriesID string) ([]port.Booking, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []port.Booking{}
+	for _, booking := range s.bookings {
+		if booking.FitnessCenterID == centerID && booking.SeriesID == seriesID {
+			out = append(out, booking)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) MoveBooking(_ context.Context, centerID, bookingID string, start, end time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, booking := range s.bookings {
+		if booking.FitnessCenterID != centerID || booking.ID != bookingID {
+			continue
+		}
+		for _, hour := range s.held {
+			if hour.TrainerID != booking.TrainerUserID || (hour.StartsAt.Equal(booking.StartsAt) && hour.EndsAt.Equal(booking.EndsAt)) {
+				continue
+			}
+			if start.Before(hour.EndsAt) && hour.StartsAt.Before(end) {
+				return schedule.ErrHourBooked
+			}
+		}
+		kept := make([]heldHour, 0, len(s.held))
+		for _, hour := range s.held {
+			if hour.TrainerID == booking.TrainerUserID && hour.StartsAt.Equal(booking.StartsAt) && hour.EndsAt.Equal(booking.EndsAt) {
+				continue
+			}
+			kept = append(kept, hour)
+		}
+		kept = append(kept, heldHour{CenterID: centerID, TrainerID: booking.TrainerUserID, StartsAt: start, EndsAt: end})
+		s.held = kept
+		booking.StartsAt = start
+		booking.EndsAt = end
+		s.bookings[i] = booking
+		return nil
+	}
+	return user.ErrNotFound
+}
+
+func (s *Store) SaveSeriesSkip(_ context.Context, centerID, branchID, seriesID, occurrence string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.skips = append(s.skips, occurrence+"|"+seriesID)
+	return nil
+}

@@ -29,6 +29,10 @@ func MountBookings(e *echo.Echo, svc *scheduleuc.Service, authSvc *authuc.Servic
 	authed.POST("/:id/decline", h.decide(string(schedule.StatusDeclined)))
 	authed.POST("/:id/cancel", h.decide(string(schedule.StatusCancelled)))
 	e.GET("/v1/timetable", h.timetable, h.auth.requireUser)
+	series := e.Group("/v1/booking-series", h.auth.requireUser)
+	series.POST("", h.repeat)
+	series.POST("/:id/skip", h.skip)
+	series.POST("/:id/move", h.move)
 }
 
 type bookingBody struct {
@@ -112,6 +116,52 @@ func (h bookingHandler) timetable(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{"sessions": out})
 }
 
+func (h bookingHandler) repeat(c echo.Context) error {
+	var body bookingBody
+	if err := decode(c, &body); err != nil {
+		return nil
+	}
+	id, err := h.svc.Repeat(c.Request().Context(), userID(c), body.StartsAt, body.EndsAt, requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"id": id})
+}
+
+type skipBody struct {
+	OccurrenceOn string    `json:"occurrence_on"`
+	StartsAt     time.Time `json:"starts_at"`
+	EndsAt       time.Time `json:"ends_at"`
+}
+
+func (b skipBody) Validate() error {
+	return validation.ValidateStruct(&b, validation.Field(&b.OccurrenceOn, validation.Required))
+}
+
+func (h bookingHandler) skip(c echo.Context) error {
+	var body skipBody
+	if err := decode(c, &body); err != nil {
+		return nil
+	}
+	err := h.svc.Skip(c.Request().Context(), userID(c), c.Param("id"), body.OccurrenceOn, requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+func (h bookingHandler) move(c echo.Context) error {
+	var body skipBody
+	if err := decode(c, &body); err != nil {
+		return nil
+	}
+	err := h.svc.Move(c.Request().Context(), userID(c), c.Param("id"), body.OccurrenceOn, body.StartsAt, body.EndsAt, requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 func bookingJSON(booking port.Booking) map[string]string {
 	return map[string]string{
 		"id":              booking.ID,
@@ -122,5 +172,6 @@ func bookingJSON(booking port.Booking) map[string]string {
 		"trainer_name":    booking.TrainerName,
 		"trainer_user_id": booking.TrainerUserID,
 		"client_user_id":  booking.ClientUserID,
+		"series_id":       booking.SeriesID,
 	}
 }

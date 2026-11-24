@@ -46,6 +46,10 @@ type ScheduleStore interface {
 	ListBookings(ctx context.Context, centerID, clientID, trainerID string, from, to time.Time) ([]Booking, error)
 	FindBooking(ctx context.Context, centerID, bookingID string) (Booking, error)
 	SetBookingStatus(ctx context.Context, centerID, bookingID, status string) error
+	SaveSeries(ctx context.Context, series Series, bookings []Booking) error
+	SeriesBookings(ctx context.Context, centerID, seriesID string) ([]Booking, error)
+	MoveBooking(ctx context.Context, centerID, bookingID string, start, end time.Time) error
+	SaveSeriesSkip(ctx context.Context, centerID, branchID, seriesID, occurrence string) error
 }
 
 // Booking is one hour a client asked for.
@@ -57,7 +61,21 @@ type Booking struct {
 	ClientUserID    string
 	TrainerName     string
 	ClientName      string
+	SeriesID        string
 	StartsAt        time.Time
 	EndsAt          time.Time
 	Status          string
+}
+
+// Series is a fixed weekly pattern.
+type Series struct {
+	ID              string
+	FitnessCenterID string
+	BranchID        string
+	TrainerUserID   string
+	ClientUserID    string
+	Weekday         int
+	LocalStart      string
+	LocalEnd        string
+	StartsOn        string
 }

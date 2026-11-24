@@ -28,6 +28,8 @@ type Store struct {
 	exceptions  []port.AvailabilityException
 	held        []heldHour
 	bookings    []port.Booking
+	series      []port.Series
+	skips       []string
 	lastMail    string
 }
 

@@ -146,10 +146,10 @@ func clockText(value string) string {
 
 func (s *Store) InsertBooking(ctx context.Context, booking port.Booking) error {
 	_, err := s.pool.Exec(ctx, `
-		INSERT INTO bookings (id, fitness_center_id, branch_id, trainer_user_id, client_user_id, starts_at, ends_at, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		INSERT INTO bookings (id, fitness_center_id, branch_id, trainer_user_id, client_user_id, series_id, starts_at, ends_at, status)
+		VALUES ($1, $2, $3, $4, $5, NULLIF($6, '')::uuid, $7, $8, $9)`,
 		booking.ID, booking.FitnessCenterID, booking.BranchID, booking.TrainerUserID, booking.ClientUserID,
-		booking.StartsAt, booking.EndsAt, booking.Status)
+		booking.SeriesID, booking.StartsAt, booking.EndsAt, booking.Status)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
 		return schedule.ErrHourBooked
@@ -161,7 +161,7 @@ func (s *Store) ListBookings(ctx context.Context, centerID, clientID, trainerID 
 	rows, err := s.pool.Query(ctx, `
 		SELECT b.id::text, b.fitness_center_id::text, b.branch_id::text,
 		       b.trainer_user_id::text, b.client_user_id::text,
-		       trainer.display_name, client.display_name,
+		       trainer.display_name, client.display_name, COALESCE(b.series_id::text, ''),
 		       b.starts_at, b.ends_at, b.status
 		FROM bookings b
 		JOIN users trainer ON trainer.id = b.trainer_user_id
@@ -178,7 +178,7 @@ func (s *Store) ListBookings(ctx context.Context, centerID, clientID, trainerID 
 	out := []port.Booking{}
 	for rows.Next() {
 		var booking port.Booking
-		if err := rows.Scan(&booking.ID, &booking.FitnessCenterID, &booking.BranchID, &booking.TrainerUserID, &booking.ClientUserID, &booking.TrainerName, &booking.ClientName, &booking.StartsAt, &booking.EndsAt, &booking.Status); err != nil {
+		if err := rows.Scan(&booking.ID, &booking.FitnessCenterID, &booking.BranchID, &booking.TrainerUserID, &booking.ClientUserID, &booking.TrainerName, &booking.ClientName, &booking.SeriesID, &booking.StartsAt, &booking.EndsAt, &booking.Status); err != nil {
 			return nil, err
 		}
 		out = append(out, booking)
@@ -216,4 +216,81 @@ func (s *Store) SetBookingStatus(ctx context.Context, centerID, bookingID, statu
 		return user.ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) SaveSeries(ctx context.Context, series port.Series, bookings []port.Booking) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	_, err = tx.Exec(ctx, `
+		INSERT INTO booking_series (id, fitness_center_id, branch_id, trainer_user_id, client_user_id, weekday, local_start, local_end, starts_on)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		series.ID, series.FitnessCenterID, series.BranchID, series.TrainerUserID, series.ClientUserID,
+		series.Weekday, series.LocalStart, series.LocalEnd, series.StartsOn)
+	if err != nil {
+		return err
+	}
+	for _, booking := range bookings {
+		_, err = tx.Exec(ctx, `
+			INSERT INTO bookings (id, fitness_center_id, branch_id, trainer_user_id, client_user_id, series_id, starts_at, ends_at, status)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			booking.ID, booking.FitnessCenterID, booking.BranchID, booking.TrainerUserID, booking.ClientUserID,
+			booking.SeriesID, booking.StartsAt, booking.EndsAt, booking.Status)
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
+			return schedule.ErrHourBooked
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (s *Store) SeriesBookings(ctx context.Context, centerID, seriesID string) ([]port.Booking, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, fitness_center_id::text, branch_id::text, trainer_user_id::text, client_user_id::text,
+		       '', '', COALESCE(series_id::text, ''), starts_at, ends_at, status
+		FROM bookings
+		WHERE fitness_center_id = $1 AND series_id = $2
+		ORDER BY starts_at`, centerID, seriesID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []port.Booking{}
+	for rows.Next() {
+		var booking port.Booking
+		if err := rows.Scan(&booking.ID, &booking.FitnessCenterID, &booking.BranchID, &booking.TrainerUserID, &booking.ClientUserID, &booking.TrainerName, &booking.ClientName, &booking.SeriesID, &booking.StartsAt, &booking.EndsAt, &booking.Status); err != nil {
+			return nil, err
+		}
+		out = append(out, booking)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) MoveBooking(ctx context.Context, centerID, bookingID string, start, end time.Time) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE bookings SET starts_at = $3, ends_at = $4, updated_at = now()
+		WHERE fitness_center_id = $1 AND id = $2`, centerID, bookingID, start, end)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23P01" {
+		return schedule.ErrHourBooked
+	}
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return user.ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) SaveSeriesSkip(ctx context.Context, centerID, branchID, seriesID, occurrence string) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO booking_series_exceptions (id, series_id, fitness_center_id, branch_id, occurrence_on, kind)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, 'skip')`, seriesID, centerID, branchID, occurrence)
+	return err
 }
