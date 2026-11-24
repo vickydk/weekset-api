@@ -57,6 +57,33 @@ func TestASuspendedMembershipCannotOpenHome(t *testing.T) {
 	assert.Equal(t, membership.CodeMembershipSuspended, denied.Code)
 }
 
+func TestHomeShowsASoloDayOnlyWhenOneExists(t *testing.T) {
+	store := memory.NewStore()
+	require.NoError(t, store.Create(context.Background(), user.User{ID: "maya", Email: "maya@weekset.test", DisplayName: "Maya", AccountType: user.AccountClient}))
+	require.NoError(t, store.CreateCenter(context.Background(), port.CenterDraft{CenterID: "center", BranchID: "branch", Timezone: "UTC"}))
+	store.PutMemberships("maya", []port.MembershipView{{
+		Role: "client", Status: "active", FitnessCenterID: "center", BranchID: "branch", CenterName: "Harbor",
+	}})
+	svc := &Service{Centers: store, Users: store, Schedule: store}
+	empty, err := svc.Home(context.Background(), "maya", membership.Headers{CenterID: "center"})
+	require.NoError(t, err)
+	assert.Nil(t, empty.Solo)
+
+	today := time.Now().UTC().Format("2006-01-02")
+	require.NoError(t, store.SaveSolo(context.Background(), port.SoloPlan{
+		ID: "plan", FitnessCenterID: "center", BranchID: "branch", ClientUserID: "maya", TrainerUserID: "pt",
+		PlanDate: today, Items: []port.SoloItem{{Slug: "squat", Sets: 3, Reps: 8, RestSeconds: 60}},
+	}))
+	card, err := svc.Home(context.Background(), "maya", membership.Headers{CenterID: "center"})
+	require.NoError(t, err)
+	require.NotNil(t, card.Solo)
+	assert.Equal(t, 1, card.Solo.Count)
+	assert.Equal(t, "squat", card.Solo.First)
+	rows, err := store.ListBookings(context.Background(), "center", "maya", "", time.Time{}, time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	assert.Empty(t, rows)
+}
+
 func newHome() (*Service, *centeruc.Service) {
 	store := memory.NewStore()
 	hasher := password.Hasher{Time: 1, Memory: 8 * 1024, Threads: 1, KeyLen: 16}

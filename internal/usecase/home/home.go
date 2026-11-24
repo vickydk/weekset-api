@@ -28,12 +28,19 @@ type Card struct {
 	Attention     []Attention
 	Sessions      []Session
 	Branches      []BranchLoad
+	Solo          *SoloDay
 }
 
 // Attention is one thing a manager or the center should do.
 type Attention struct {
 	Label  string
 	Action string
+}
+
+// SoloDay is the client's plan when one exists. A missing plan stays nil.
+type SoloDay struct {
+	Count int
+	First string
 }
 
 // Session is a timetable row. It has no note, sets, reps, or load.
@@ -236,6 +243,13 @@ func (s *Service) withToday(ctx context.Context, scope membership.Scope, card Ca
 		})
 	}
 	card.Sessions = sessions
+	if s.Schedule != nil && scope.Role == membership.RoleClient {
+		today := time.Now().UTC().Format("2006-01-02")
+		plan, err := s.Schedule.FindSolo(ctx, scope.FitnessCenterID, scope.UserID, today)
+		if err == nil && len(plan.Items) > 0 {
+			card.Solo = &SoloDay{Count: len(plan.Items), First: plan.Items[0].Slug}
+		}
+	}
 	return card, nil
 }
 

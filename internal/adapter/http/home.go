@@ -25,7 +25,7 @@ func (h homeHandler) home(c echo.Context) error {
 	if err != nil {
 		return writeCenterError(c, err)
 	}
-	return c.JSON(http.StatusOK, map[string]any{
+	body := map[string]any{
 		"role":           card.Role,
 		"question":       card.Question,
 		"center_name":    card.CenterName,
@@ -36,7 +36,11 @@ func (h homeHandler) home(c echo.Context) error {
 		"attention":      attentionJSON(card.Attention),
 		"sessions":       timetableJSON(card.Sessions),
 		"branches":       branchJSON(card.Branches),
-	})
+	}
+	if card.Solo != nil {
+		body["solo"] = map[string]any{"count": card.Solo.Count, "first": card.Solo.First}
+	}
+	return c.JSON(http.StatusOK, body)
 }
 
 func attentionJSON(rows []homeuc.Attention) []map[string]string {
