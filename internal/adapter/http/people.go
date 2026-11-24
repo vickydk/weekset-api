@@ -77,8 +77,8 @@ func (h centerHandler) listPeople(c echo.Context) error {
 	for _, person := range page.People {
 		people = append(people, map[string]string{
 			"user_id": person.UserID, "display_name": person.DisplayName, "email": person.Email,
-			"role": person.Role, "status": person.Status, "branch_name": person.BranchName,
-			"trainer_name": person.TrainerName,
+			"role": person.Role, "status": person.Status, "branch_id": person.BranchID,
+			"branch_name": person.BranchName, "trainer_name": person.TrainerName,
 		})
 	}
 	invites := make([]map[string]string, 0, len(page.Invites))
