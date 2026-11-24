@@ -58,6 +58,10 @@ func (s *Service) Request(ctx context.Context, userID string, start, end time.Ti
 	if err := s.Schedule.InsertBooking(ctx, booking); err != nil {
 		return port.Booking{}, err
 	}
+	_ = s.Schedule.AddNotification(ctx, port.Notification{
+		ID: newID(), FitnessCenterID: scope.FitnessCenterID, UserID: trainerID,
+		Kind: "requested", BookingID: booking.ID,
+	})
 	return booking, nil
 }
 

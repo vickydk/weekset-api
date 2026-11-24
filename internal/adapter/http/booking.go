@@ -33,6 +33,8 @@ func MountBookings(e *echo.Echo, svc *scheduleuc.Service, authSvc *authuc.Servic
 	series.POST("", h.repeat)
 	series.POST("/:id/skip", h.skip)
 	series.POST("/:id/move", h.move)
+	e.GET("/v1/notifications", h.inbox, h.auth.requireUser)
+	e.POST("/v1/notifications/:id/read", h.openNotice, h.auth.requireUser)
 }
 
 type bookingBody struct {
@@ -160,6 +162,31 @@ func (h bookingHandler) move(c echo.Context) error {
 		return writeScheduleError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (h bookingHandler) inbox(c echo.Context) error {
+	rows, err := h.svc.Inbox(c.Request().Context(), userID(c), requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{
+			"id": row.ID, "kind": row.Kind, "booking_id": row.BookingID,
+			"read": row.Read, "created_at": row.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return c.JSON(http.StatusOK, map[string]any{"notifications": out})
+}
+
+func (h bookingHandler) openNotice(c echo.Context) error {
+	notice, err := h.svc.OpenNotice(c.Request().Context(), userID(c), c.Param("id"), requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	return c.JSON(http.StatusOK, map[string]string{
+		"id": notice.ID, "kind": notice.Kind, "booking_id": notice.BookingID,
+	})
 }
 
 func bookingJSON(booking port.Booking) map[string]string {

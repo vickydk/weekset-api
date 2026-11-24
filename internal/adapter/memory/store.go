@@ -30,6 +30,7 @@ type Store struct {
 	bookings    []port.Booking
 	series      []port.Series
 	skips       []string
+	notices     []port.Notification
 	lastMail    string
 }
 

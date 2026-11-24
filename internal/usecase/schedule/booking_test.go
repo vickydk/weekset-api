@@ -45,4 +45,13 @@ func TestRequestHoldsTheHourForTheNextClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "Maya", rows[0].ClientName)
+
+	notes, err := svc.Inbox(context.Background(), "pt", membership.Headers{CenterID: "center"})
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, booked.ID, notes[0].BookingID)
+	opened, err := svc.OpenNotice(context.Background(), "pt", notes[0].ID, membership.Headers{CenterID: "center"})
+	require.NoError(t, err)
+	assert.True(t, opened.Read)
+	assert.Equal(t, booked.ID, opened.BookingID)
 }

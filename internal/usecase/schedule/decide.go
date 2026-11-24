@@ -42,6 +42,10 @@ func (s *Service) Decide(ctx context.Context, userID, bookingID, status string, 
 		return port.Booking{}, err
 	}
 	booking.Status = status
+	_ = s.Schedule.AddNotification(ctx, port.Notification{
+		ID: newID(), FitnessCenterID: scope.FitnessCenterID, UserID: booking.ClientUserID,
+		Kind: status, BookingID: booking.ID,
+	})
 	return booking, nil
 }
 

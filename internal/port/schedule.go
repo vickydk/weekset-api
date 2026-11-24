@@ -50,6 +50,9 @@ type ScheduleStore interface {
 	SeriesBookings(ctx context.Context, centerID, seriesID string) ([]Booking, error)
 	MoveBooking(ctx context.Context, centerID, bookingID string, start, end time.Time) error
 	SaveSeriesSkip(ctx context.Context, centerID, branchID, seriesID, occurrence string) error
+	AddNotification(ctx context.Context, notice Notification) error
+	ListNotifications(ctx context.Context, centerID, userID string) ([]Notification, error)
+	ReadNotification(ctx context.Context, centerID, userID, noticeID string) (Notification, error)
 }
 
 // Booking is one hour a client asked for.
@@ -78,4 +81,15 @@ type Series struct {
 	LocalStart      string
 	LocalEnd        string
 	StartsOn        string
+}
+
+// Notification is an in-app schedule update. Kind is the event. BookingID is the session.
+type Notification struct {
+	ID              string
+	FitnessCenterID string
+	UserID          string
+	Kind            string
+	BookingID       string
+	Read            bool
+	CreatedAt       time.Time
 }

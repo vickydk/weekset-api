@@ -292,3 +292,38 @@ func (s *Store) SaveSeriesSkip(_ context.Context, centerID, branchID, seriesID, 
 	s.skips = append(s.skips, occurrence+"|"+seriesID)
 	return nil
 }
+
+func (s *Store) AddNotification(_ context.Context, notice port.Notification) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if notice.CreatedAt.IsZero() {
+		notice.CreatedAt = time.Now().UTC()
+	}
+	s.notices = append(s.notices, notice)
+	return nil
+}
+
+func (s *Store) ListNotifications(_ context.Context, centerID, userID string) ([]port.Notification, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := []port.Notification{}
+	for _, notice := range s.notices {
+		if notice.FitnessCenterID == centerID && notice.UserID == userID {
+			out = append(out, notice)
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) ReadNotification(_ context.Context, centerID, userID, noticeID string) (port.Notification, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, notice := range s.notices {
+		if notice.ID == noticeID && notice.FitnessCenterID == centerID && notice.UserID == userID {
+			notice.Read = true
+			s.notices[i] = notice
+			return notice, nil
+		}
+	}
+	return port.Notification{}, user.ErrNotFound
+}

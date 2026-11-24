@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -293,4 +294,64 @@ func (s *Store) SaveSeriesSkip(ctx context.Context, centerID, branchID, seriesID
 		INSERT INTO booking_series_exceptions (id, series_id, fitness_center_id, branch_id, occurrence_on, kind)
 		VALUES (gen_random_uuid(), $1, $2, $3, $4, 'skip')`, seriesID, centerID, branchID, occurrence)
 	return err
+}
+
+func (s *Store) AddNotification(ctx context.Context, notice port.Notification) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO notifications (id, fitness_center_id, user_id, kind)
+		VALUES ($1, $2, $3, $4)`,
+		notice.ID, notice.FitnessCenterID, notice.UserID, notice.Kind+":"+notice.BookingID)
+	return err
+}
+
+func (s *Store) ListNotifications(ctx context.Context, centerID, userID string) ([]port.Notification, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, fitness_center_id::text, user_id::text, kind, read_at, created_at
+		FROM notifications
+		WHERE fitness_center_id = $1 AND user_id = $2
+		ORDER BY created_at DESC`, centerID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []port.Notification{}
+	for rows.Next() {
+		var notice port.Notification
+		var kind string
+		var readAt *time.Time
+		if err := rows.Scan(&notice.ID, &notice.FitnessCenterID, &notice.UserID, &kind, &readAt, &notice.CreatedAt); err != nil {
+			return nil, err
+		}
+		notice.Kind, notice.BookingID = splitNotice(kind)
+		notice.Read = readAt != nil
+		out = append(out, notice)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) ReadNotification(ctx context.Context, centerID, userID, noticeID string) (port.Notification, error) {
+	var notice port.Notification
+	var kind string
+	err := s.pool.QueryRow(ctx, `
+		UPDATE notifications SET read_at = now()
+		WHERE id = $1 AND fitness_center_id = $2 AND user_id = $3
+		RETURNING id::text, fitness_center_id::text, user_id::text, kind, created_at`,
+		noticeID, centerID, userID).Scan(&notice.ID, &notice.FitnessCenterID, &notice.UserID, &kind, &notice.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return port.Notification{}, user.ErrNotFound
+	}
+	if err != nil {
+		return port.Notification{}, err
+	}
+	notice.Kind, notice.BookingID = splitNotice(kind)
+	notice.Read = true
+	return notice, nil
+}
+
+func splitNotice(kind string) (string, string) {
+	parts := strings.SplitN(kind, ":", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return kind, ""
 }
