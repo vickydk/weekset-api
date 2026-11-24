@@ -23,6 +23,10 @@ type Store struct {
 	invites     []port.Invite
 	memberIDs   map[string]string
 	assignments map[string]port.Assignment
+	zones       map[string]string
+	rules       []port.AvailabilityRule
+	exceptions  []port.AvailabilityException
+	held        []heldHour
 	lastMail    string
 }
 
@@ -34,6 +38,7 @@ func NewStore() *Store {
 		members:     map[string][]port.MembershipView{},
 		memberIDs:   map[string]string{},
 		assignments: map[string]port.Assignment{},
+		zones:       map[string]string{},
 	}
 }
 

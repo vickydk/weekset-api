@@ -180,8 +180,16 @@ func (s *Store) AssignTrainer(_ context.Context, draft port.Assignment) error {
 	return nil
 }
 
-func (s *Store) CountTrainerRules(context.Context, string, string) (int, error) {
-	return 0, nil
+func (s *Store) CountTrainerRules(_ context.Context, centerID, trainerID string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	count := 0
+	for _, rule := range s.rules {
+		if rule.FitnessCenterID == centerID && rule.TrainerUserID == trainerID {
+			count++
+		}
+	}
+	return count, nil
 }
 
 func memberKey(userID, centerID string) string {

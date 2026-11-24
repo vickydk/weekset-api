@@ -34,6 +34,7 @@ func (s *Store) CreateCenter(_ context.Context, draft port.CenterDraft) error {
 	s.branches = append(s.branches, port.Branch{
 		ID: draft.BranchID, FitnessCenterID: draft.CenterID, Name: draft.BranchName,
 	})
+	s.zones[draft.CenterID] = draft.Timezone
 	return nil
 }
 

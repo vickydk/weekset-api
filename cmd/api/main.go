@@ -18,6 +18,7 @@ import (
 	centeruc "github.com/vickydk/weekset-api/internal/usecase/center"
 	homeuc "github.com/vickydk/weekset-api/internal/usecase/home"
 	peopleuc "github.com/vickydk/weekset-api/internal/usecase/people"
+	scheduleuc "github.com/vickydk/weekset-api/internal/usecase/schedule"
 )
 
 func main() {
@@ -56,6 +57,7 @@ func main() {
 		}, peopleSvc, authSvc)
 		httpadapter.MountPeople(router, peopleSvc, authSvc)
 		httpadapter.MountHome(router, &homeuc.Service{Centers: store, Users: store}, authSvc)
+		httpadapter.MountAvailability(router, &scheduleuc.Service{Schedule: store, Users: store}, authSvc)
 	}
 
 	err := router.Start(":" + port)
