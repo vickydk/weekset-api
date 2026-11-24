@@ -1,0 +1,23 @@
+DROP TABLE IF EXISTS password_resets;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS invites;
+DROP TABLE IF EXISTS audit_events;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS solo_plan_items;
+DROP TABLE IF EXISTS solo_plans;
+DROP TABLE IF EXISTS exercises;
+DROP TABLE IF EXISTS session_log_sets;
+DROP TABLE IF EXISTS session_logs;
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS booking_series_exceptions;
+DROP TABLE IF EXISTS booking_series;
+DROP TABLE IF EXISTS availability_exceptions;
+DROP TABLE IF EXISTS availability_rules;
+DROP TABLE IF EXISTS trainer_assignments;
+DROP TABLE IF EXISTS manager_branches;
+DROP TABLE IF EXISTS memberships;
+DROP TABLE IF EXISTS branches;
+DROP TABLE IF EXISTS fitness_centers;
+DROP TABLE IF EXISTS users;
+
+DROP EXTENSION IF EXISTS btree_gist;
