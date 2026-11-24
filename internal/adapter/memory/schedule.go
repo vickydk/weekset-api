@@ -172,3 +172,46 @@ func (s *Store) ListBookings(_ context.Context, centerID, clientID, trainerID st
 	}
 	return out, nil
 }
+
+func (s *Store) FindBooking(_ context.Context, centerID, bookingID string) (port.Booking, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, booking := range s.bookings {
+		if booking.FitnessCenterID == centerID && booking.ID == bookingID {
+			if account, ok := s.users[booking.ClientUserID]; ok {
+				booking.ClientName = account.DisplayName
+			}
+			if account, ok := s.users[booking.TrainerUserID]; ok {
+				booking.TrainerName = account.DisplayName
+			}
+			return booking, nil
+		}
+	}
+	return port.Booking{}, user.ErrNotFound
+}
+
+func (s *Store) SetBookingStatus(_ context.Context, centerID, bookingID, status string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, booking := range s.bookings {
+		if booking.FitnessCenterID != centerID || booking.ID != bookingID {
+			continue
+		}
+		if schedule.HoldsSlot(schedule.Status(booking.Status)) && !schedule.HoldsSlot(schedule.Status(status)) {
+			kept := make([]heldHour, 0, len(s.held))
+			removed := false
+			for _, hour := range s.held {
+				if !removed && hour.TrainerID == booking.TrainerUserID && hour.StartsAt.Equal(booking.StartsAt) && hour.EndsAt.Equal(booking.EndsAt) {
+					removed = true
+					continue
+				}
+				kept = append(kept, hour)
+			}
+			s.held = kept
+		}
+		booking.Status = status
+		s.bookings[i] = booking
+		return nil
+	}
+	return user.ErrNotFound
+}

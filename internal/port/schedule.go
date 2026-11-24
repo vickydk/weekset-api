@@ -44,6 +44,8 @@ type ScheduleStore interface {
 	AssignedTrainer(ctx context.Context, centerID, clientUserID string) (trainerID, branchID string, err error)
 	InsertBooking(ctx context.Context, booking Booking) error
 	ListBookings(ctx context.Context, centerID, clientID, trainerID string, from, to time.Time) ([]Booking, error)
+	FindBooking(ctx context.Context, centerID, bookingID string) (Booking, error)
+	SetBookingStatus(ctx context.Context, centerID, bookingID, status string) error
 }
 
 // Booking is one hour a client asked for.

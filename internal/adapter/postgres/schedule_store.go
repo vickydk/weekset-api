@@ -185,3 +185,35 @@ func (s *Store) ListBookings(ctx context.Context, centerID, clientID, trainerID 
 	}
 	return out, rows.Err()
 }
+
+func (s *Store) FindBooking(ctx context.Context, centerID, bookingID string) (port.Booking, error) {
+	var booking port.Booking
+	err := s.pool.QueryRow(ctx, `
+		SELECT b.id::text, b.fitness_center_id::text, b.branch_id::text,
+		       b.trainer_user_id::text, b.client_user_id::text,
+		       trainer.display_name, client.display_name,
+		       b.starts_at, b.ends_at, b.status
+		FROM bookings b
+		JOIN users trainer ON trainer.id = b.trainer_user_id
+		JOIN users client ON client.id = b.client_user_id
+		WHERE b.fitness_center_id = $1 AND b.id = $2`, centerID, bookingID).Scan(
+		&booking.ID, &booking.FitnessCenterID, &booking.BranchID, &booking.TrainerUserID, &booking.ClientUserID,
+		&booking.TrainerName, &booking.ClientName, &booking.StartsAt, &booking.EndsAt, &booking.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return port.Booking{}, user.ErrNotFound
+	}
+	return booking, err
+}
+
+func (s *Store) SetBookingStatus(ctx context.Context, centerID, bookingID, status string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE bookings SET status = $3, updated_at = now()
+		WHERE fitness_center_id = $1 AND id = $2`, centerID, bookingID, status)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return user.ErrNotFound
+	}
+	return nil
+}

@@ -7,6 +7,7 @@ import (
 	"github.com/go-ozzo/ozzo-validation/v4"
 	"github.com/labstack/echo/v4"
 
+	"github.com/vickydk/weekset-api/internal/domain/schedule"
 	"github.com/vickydk/weekset-api/internal/platform/apierror"
 	"github.com/vickydk/weekset-api/internal/port"
 	authuc "github.com/vickydk/weekset-api/internal/usecase/auth"
@@ -24,6 +25,10 @@ func MountBookings(e *echo.Echo, svc *scheduleuc.Service, authSvc *authuc.Servic
 	authed := e.Group("/v1/bookings", h.auth.requireUser)
 	authed.POST("", h.request)
 	authed.GET("", h.list)
+	authed.POST("/:id/confirm", h.decide(string(schedule.StatusConfirmed)))
+	authed.POST("/:id/decline", h.decide(string(schedule.StatusDeclined)))
+	authed.POST("/:id/cancel", h.decide(string(schedule.StatusCancelled)))
+	e.GET("/v1/timetable", h.timetable, h.auth.requireUser)
 }
 
 type bookingBody struct {
@@ -70,6 +75,41 @@ func (h bookingHandler) list(c echo.Context) error {
 		out = append(out, bookingJSON(row))
 	}
 	return c.JSON(http.StatusOK, map[string]any{"bookings": out})
+}
+
+func (h bookingHandler) decide(status string) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		booking, err := h.svc.Decide(c.Request().Context(), userID(c), c.Param("id"), status, requestHeaders(c))
+		if err != nil {
+			return writeScheduleError(c, err)
+		}
+		return c.JSON(http.StatusOK, bookingJSON(booking))
+	}
+}
+
+func (h bookingHandler) timetable(c echo.Context) error {
+	from, err := time.Parse(time.RFC3339, c.QueryParam("from"))
+	if err != nil {
+		apierror.Write(c.Response(), http.StatusBadRequest, "validation_error", "check the hours")
+		return nil
+	}
+	to, err := time.Parse(time.RFC3339, c.QueryParam("to"))
+	if err != nil {
+		apierror.Write(c.Response(), http.StatusBadRequest, "validation_error", "check the hours")
+		return nil
+	}
+	rows, err := h.svc.Timetable(c.Request().Context(), userID(c), from, to, requestHeaders(c))
+	if err != nil {
+		return writeScheduleError(c, err)
+	}
+	out := make([]map[string]string, 0, len(rows))
+	for _, row := range rows {
+		item := bookingJSON(row)
+		delete(item, "trainer_user_id")
+		delete(item, "client_user_id")
+		out = append(out, item)
+	}
+	return c.JSON(http.StatusOK, map[string]any{"sessions": out})
 }
 
 func bookingJSON(booking port.Booking) map[string]string {

@@ -51,7 +51,7 @@ func timetableJSON(rows []homeuc.Session) []map[string]string {
 	out := make([]map[string]string, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]string{
-			"time": row.Time, "client_name": row.ClientName, "trainer_name": row.TrainerName,
+			"id": row.ID, "time": row.Time, "client_name": row.ClientName, "trainer_name": row.TrainerName,
 			"branch_name": row.BranchName, "status": row.Status,
 		})
 	}

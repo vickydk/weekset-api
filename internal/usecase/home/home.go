@@ -2,6 +2,7 @@ package home
 
 import (
 	"context"
+	"time"
 
 	"github.com/vickydk/weekset-api/internal/domain/membership"
 	"github.com/vickydk/weekset-api/internal/domain/user"
@@ -10,8 +11,9 @@ import (
 
 // Service builds the first tab for the caller's role.
 type Service struct {
-	Centers port.CenterStore
-	Users   port.UserRepository
+	Centers  port.CenterStore
+	Users    port.UserRepository
+	Schedule port.ScheduleStore
 }
 
 // Card is one dashboard. Workout fields are never set.
@@ -36,6 +38,7 @@ type Attention struct {
 
 // Session is a timetable row. It has no note, sets, reps, or load.
 type Session struct {
+	ID          string
 	Time        string
 	ClientName  string
 	TrainerName string
@@ -69,13 +72,14 @@ func (s *Service) Home(ctx context.Context, userID string, headers membership.He
 	name := centerLabel(rows, scope.FitnessCenterID)
 	switch scope.Role {
 	case membership.RoleClient:
-		return Card{
+		card := Card{
 			Role: string(scope.Role), Question: "What do I do next?",
 			CenterName: name, BranchName: branchLabel(rows, scope),
 			EmptyTitle: "No session today", EmptyMessage: "See open hours.",
 			PrimaryAction: "See open hours",
 			Attention:     []Attention{}, Sessions: []Session{}, Branches: []BranchLoad{},
-		}, nil
+		}
+		return s.withToday(ctx, scope, card)
 	case membership.RoleTrainer:
 		rules, err := s.Centers.CountTrainerRules(ctx, scope.FitnessCenterID, userID)
 		if err != nil {
@@ -85,12 +89,13 @@ func (s *Service) Home(ctx context.Context, userID string, headers membership.He
 		if rules > 0 {
 			action = "Your hours are open."
 		}
-		return Card{
+		card := Card{
 			Role: string(scope.Role), Question: "Who needs me today?",
 			CenterName: name, BranchName: branchLabel(rows, scope),
 			EmptyTitle: "No one booked.", EmptyMessage: action, PrimaryAction: action,
 			Attention: []Attention{}, Sessions: []Session{}, Branches: []BranchLoad{},
-		}, nil
+		}
+		return s.withToday(ctx, scope, card)
 	case membership.RoleManager:
 		return s.manager(ctx, scope, name)
 	case membership.RoleCenterAdmin:
@@ -152,7 +157,7 @@ func (s *Service) manager(ctx context.Context, scope membership.Scope, centerNam
 	if len(attention) > 2 {
 		card.Attention = attention[:2]
 	}
-	return card, nil
+	return s.withToday(ctx, scope, card)
 }
 
 func (s *Service) center(ctx context.Context, scope membership.Scope, centerName string) (Card, error) {
@@ -195,6 +200,42 @@ func (s *Service) center(ctx context.Context, scope membership.Scope, centerName
 		card.EmptyTitle = "Invite a manager for " + needsManager + "."
 		card.EmptyMessage = card.EmptyTitle
 	}
+	return s.withToday(ctx, scope, card)
+}
+
+func (s *Service) withToday(ctx context.Context, scope membership.Scope, card Card) (Card, error) {
+	if s.Schedule == nil {
+		return card, nil
+	}
+	now := time.Now().UTC()
+	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	rows, err := s.Schedule.ListBookings(ctx, scope.FitnessCenterID, "", "", from, from.AddDate(0, 0, 1))
+	if err != nil {
+		return Card{}, err
+	}
+	sessions := []Session{}
+	for _, row := range rows {
+		switch scope.Role {
+		case membership.RoleClient:
+			if row.ClientUserID != scope.UserID {
+				continue
+			}
+		case membership.RoleTrainer:
+			if row.TrainerUserID != scope.UserID {
+				continue
+			}
+		case membership.RoleManager:
+			if row.BranchID != scope.BranchID {
+				continue
+			}
+		}
+		sessions = append(sessions, Session{
+			ID: row.ID, Time: row.StartsAt.UTC().Format("15:04"),
+			ClientName: row.ClientName, TrainerName: row.TrainerName,
+			BranchName: card.BranchName, Status: row.Status,
+		})
+	}
+	card.Sessions = sessions
 	return card, nil
 }
 
